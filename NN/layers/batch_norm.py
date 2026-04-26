@@ -1,7 +1,7 @@
 from NN.layer import Layer
 from utils.backend import np
 
-
+# TODO return dL_dout в режиме визуализации
 class BatchNorm(Layer):
     def __init__(self, d, eps=0.001, momentum=0.99, print_hyperparams=True):
         super().__init__()

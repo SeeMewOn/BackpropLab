@@ -1,0 +1,9 @@
+Epoch:            15 / 20
+Time:             5604.64 s.
+Accuracy:         90.55%
+Overfit:          32.23%
+Training Loss:    1.56e-01
+Validation Loss:  2.31e-01
+[CONFUSION MATRIX]
+[[1822  178]
+ [ 200 1800]]

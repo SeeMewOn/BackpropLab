@@ -2,7 +2,7 @@ from utils.backend import np
 from utils.backend import as_strided
 from NN.layer import Layer
 
-
+# TODO добавить возможность не учитывать смещения. Это может пригодиться, например, когда после Conv стоит BatchNorm
 class Conv(Layer):
     def __init__(
             self,
