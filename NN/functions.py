@@ -4,6 +4,15 @@ from deprecated.enums import RegMode
 from utils.backend import np
 
 
+def softmax(X):
+	"""
+	Универсальный softmax для тензоров любой размерности
+	"""
+	X_exp = np.exp(X - np.max(X, axis=-1, keepdims=True))
+	sum_exp = np.sum(X_exp, axis=-1, keepdims=True)
+	return X_exp / sum_exp
+
+
 def im2tensor(img_path, target_size=(64, 64), augment=False):
 	img = Image.open(img_path).convert("RGB")
 
@@ -88,32 +97,32 @@ def error(
 		return base_e + 0.5 * l * np.sum(np.abs(w)[1:])
 
 
-def softmax_vector(z: np.ndarray):
-	"""
-	Стандартная функция Softmax.
-	Вычитание максимальной компоненты из вектора z даёт численную стабильность.
-	:param z: Вектор.
-	:return: Вектор.
-	"""
-	z_exp = np.exp(z - np.max(z))
-	y = z_exp / np.sum(z_exp)
-	return y
-
-
-def softmax(Z: np.ndarray) -> np.ndarray:
-	"""
-	Матричная функция Softmax. Может принимать на вход как вектор, так и матрицу.
-
-	- В случае вектора возвращает стандартный вектор Softmax;
-	- В случае матрицы возвращает матрицу, строки которой - Softmax-ы соответствующих строк входной матрицы.
-
-	Вычитание максимальной компоненты из вектора z даёт численную стабильность.
-	:param Z: Вектор или матрица.
-	:return: Вектор или матрица Softmax.
-	"""
-	Z_exp = np.exp(Z - np.max(Z, axis=1, keepdims=True))
-	S = np.sum(Z_exp, axis=1, keepdims=True)
-	return Z_exp / S
+# def softmax_vector(z: np.ndarray):
+# 	"""
+# 	Стандартная функция Softmax.
+# 	Вычитание максимальной компоненты из вектора z даёт численную стабильность.
+# 	:param z: Вектор.
+# 	:return: Вектор.
+# 	"""
+# 	z_exp = np.exp(z - np.max(z))
+# 	y = z_exp / np.sum(z_exp)
+# 	return y
+#
+#
+# def softmax(Z: np.ndarray) -> np.ndarray:
+# 	"""
+# 	Матричная функция Softmax. Может принимать на вход как вектор, так и матрицу.
+#
+# 	- В случае вектора возвращает стандартный вектор Softmax;
+# 	- В случае матрицы возвращает матрицу, строки которой - Softmax-ы соответствующих строк входной матрицы.
+#
+# 	Вычитание максимальной компоненты из вектора z даёт численную стабильность.
+# 	:param Z: Вектор или матрица.
+# 	:return: Вектор или матрица Softmax.
+# 	"""
+# 	Z_exp = np.exp(Z - np.max(Z, axis=1, keepdims=True))
+# 	S = np.sum(Z_exp, axis=1, keepdims=True)
+# 	return Z_exp / S
 
 
 # def grad_log_reg_vec(W, b, X, T):
