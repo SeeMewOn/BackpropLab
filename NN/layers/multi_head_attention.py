@@ -35,7 +35,6 @@ class MultiHeadSelfAttention(Layer):
 		B, L, D = X.shape
 		W_Q, W_K, W_V, W_O = self.params
 
-		# TODO 3d тензоры занимают дополнительную память? Может быть отказаться от их хранения?
 		# (B, L, D) @ (D, D) -> (B, L, D)
 		Q = X @ W_Q
 		K = X @ W_K
