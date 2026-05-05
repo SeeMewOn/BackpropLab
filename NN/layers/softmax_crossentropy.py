@@ -20,5 +20,5 @@ class SoftmaxCrossEntropy(Layer):
         return Z
 
     def backward(self, T: np.ndarray, calc_grads: bool = True) -> np.ndarray:
-        dL_dA = self.Z - T
+        dL_dA = (self.Z - T) / T.shape[0]
         return dL_dA

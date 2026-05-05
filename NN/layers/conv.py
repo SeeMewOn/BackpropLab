@@ -59,10 +59,10 @@ class Conv(Layer):
             Z_trans = self.Z_prev.transpose(1, 0, 2, 3)
             C, N, HZ, WZ = Z_trans.shape
             dil_dL_dA = _dilate(dL_dA.transpose(1, 0, 2, 3), self.s - 1)
-            dL_dW = _conv2d_batch_ext(Z_trans, dil_dL_dA).transpose(1, 0, 2, 3) / N
+            dL_dW = _conv2d_batch_ext(Z_trans, dil_dL_dA).transpose(1, 0, 2, 3)
 
             # Получаем dL_db
-            dL_db = np.sum(dL_dA, axis=(0, 2, 3)) / N
+            dL_db = np.sum(dL_dA, axis=(0, 2, 3))
 
             # Сохраняем градиенты и возвращаем результат
             self.grads = [dL_dW, dL_db]
