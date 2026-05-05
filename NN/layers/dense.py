@@ -1,3 +1,5 @@
+import time
+
 from utils.backend import np
 
 from NN.layer import Layer
@@ -24,13 +26,49 @@ class Dense(Layer):
 
     def backward(self, dL_dY: np.ndarray):
         W, b = self.params
+        D_in = self.X.shape[-1]
+        D_out = dL_dY.shape[-1]
 
-        dL_dZ_prev = dL_dY @ W
+        dL_dX = dL_dY @ W
 
         if self.is_training:
-            # N = dL_dY.shape[0]  # Batch size
-            dL_db = dL_dY.sum(axis=0)
-            dL_dW = dL_dY.T @ self.X
+            # Сплющиваем (B, L) в одну ось, чтобы считать градиенты параметров
+            # (B*L, D_out)
+            dL_dY_flat = dL_dY.reshape(-1, D_out)
+            # (B*L, D_in)
+            X_flat = self.X.reshape(-1, D_in)
+
+            dL_dW = dL_dY_flat.T @ X_flat  # (D_out, D_in)
+            dL_db = np.sum(dL_dY_flat, axis=0) # (D_out,)
             self.grads = [dL_dW, dL_db]
 
-        return dL_dZ_prev
+        return dL_dX
+
+if __name__ == '__main__':
+
+    B, L, D_in, D_out = 32, 1024, 512, 20000
+    tensor = np.random.rand(B, L, D_in).astype(np.float32)
+    fake_grad = np.random.rand(B, L, D_out).astype(np.float32)
+
+    layer = Dense(512, 20000)
+
+    # Forward test
+    start = time.time()
+    for t in range(5):
+        layer.forward(tensor)
+        print(f"\r{t}", end="")
+
+    print()
+    end = time.time()
+    print(f"Forward time: {end - start}")
+
+    # Backward test
+    start = time.time()
+    for t in range(5):
+        layer.backward(fake_grad)
+        # print(f"\r{t}", end="")
+        print(t)
+
+    print()
+    end = time.time()
+    print(f"Backward time: {end - start}")
