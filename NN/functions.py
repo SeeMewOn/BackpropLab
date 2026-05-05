@@ -166,7 +166,6 @@ def error_log_reg(
 		class_index = np.argmax(t)
 		z = W @ x + b  # (K,)
 		# z_max = np.max(z)
-		# TODO оптимизация вычисления? иногда экспонента улетает в бесконечность
 		err += -z[class_index] + np.log(np.sum(np.exp(z)))
 
 	return err / N

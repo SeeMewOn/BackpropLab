@@ -1,3 +1,5 @@
+import time
+
 from NN.functions import softmax
 from utils.backend import np
 
@@ -73,20 +75,20 @@ class MultiHeadSelfAttention(Layer):
 		B, L, D = X.shape
 
 		# 1. dL_dW_O
-		O_flat = SDPA_3d.reshape(-1, D)    # (B, L, D) -> (B*L, D)
+		O_flat = SDPA_3d.reshape(-1, D)  # (B, L, D) -> (B*L, D)
 		dL_dY_flat = dL_dY.reshape(-1, D)  # (B, L, D) -> (B*L, D)
-		dL_dW_O = O_flat.T @ dL_dY_flat    # (D, B*L) @ (B*L, D) -> (D, D)
+		dL_dW_O = O_flat.T @ dL_dY_flat  # (D, B*L) @ (B*L, D) -> (D, D)
 
 		# 2. dL_dO
-		dL_dO = dL_dY @ W_O.T   # (B, L, D) @ (D, D) -> (B, L, D)
-		dL_dO = dL_dO.reshape(B, L, self.n_head, self.d_head)   # (B, L, D) -> (B, L, H, d_h)
-		dL_dO = dL_dO.transpose(0, 2, 1, 3) # (B, L, H, d_h) -> (B, H, L, d_h)
+		dL_dO = dL_dY @ W_O.T  # (B, L, D) @ (D, D) -> (B, L, D)
+		dL_dO = dL_dO.reshape(B, L, self.n_head, self.d_head)  # (B, L, D) -> (B, L, H, d_h)
+		dL_dO = dL_dO.transpose(0, 2, 1, 3)  # (B, L, H, d_h) -> (B, H, L, d_h)
 
 		# 3. dL_dSM (градиент по софтмаксу)
-		dL_dSM = dL_dO @ V.swapaxes(-1, -2)     # (B, H, L, d_h) @ (B, H, d_h, L) -> (B, H, L, L)
+		dL_dSM = dL_dO @ V.swapaxes(-1, -2)  # (B, H, L, d_h) @ (B, H, d_h, L) -> (B, H, L, L)
 
 		# 4. dL_dARG (градиент по аргументу софтмакса)
-		dL_dARG = (dL_dSM - (dL_dSM * SM).sum(axis=-1, keepdims=True)) * SM    # (B, H, L, L)
+		dL_dARG = (dL_dSM - (dL_dSM * SM).sum(axis=-1, keepdims=True)) * SM  # (B, H, L, L)
 		dL_dARG /= np.sqrt(self.d_head)
 
 		# 5. dL_dQ, dL_dK, dL_dV
@@ -140,44 +142,28 @@ def scaled_dot_product_attention(Q, K, V, mask=None):
 # 	return scaled_dot_product_attention(X, X, X, mask)
 
 
-
 if __name__ == '__main__':
-	vector = np.array([1, 2])
-	matrix = np.array([[1, 2],
-	                   [3, 4]])
-	tensor3d = np.array([
-		[[5, 6],
-		 [70, 8]],
-		[[9, 10],
-		 [11, 12]]
-	])
 
-	q = np.array([
-		[[5, 6],
-		 [70, 8]],
-		[[9, 8],
-		 [11, 15]]
-	])
-	k = np.array([
-		[[0, 6],
-		 [2, 8]],
-		[[0, 0],
-		 [11, 12]]
-	])
-	v = np.array([
-		[[5, 0],
-		 [70, 8]],
-		[[0, 10],
-		 [11, 0]]
-	])
-	print(k * v)
-	# print(self_attention(tensor3d))
-	print()
-	print(scaled_dot_product_attention(tensor3d, tensor3d, tensor3d))
-	print()
-	print(scaled_dot_product_attention(q, k, v))
+	# (B, L, D)
+	tensor = np.random.rand(32, 1024, 512)
+	mha = MultiHeadSelfAttention(512, 4)
 
-	m = np.array([[1, 2, 3],
-	              [4, 5, 6],
-	              [7, 8, 9]])
-	print(m.sum(axis=-1, keepdims=True))
+	# Forward test
+	start = time.time()
+	for t in range(100):
+		mha.forward(tensor)
+		print(f"\r{t}", end="")
+
+	print()
+	end = time.time()
+	print(f"Forward time: {end - start}")
+
+	# Backward test
+	start = time.time()
+	for t in range(100):
+		mha.backward(tensor)
+		print(f"\r{t}", end="")
+
+	print()
+	end = time.time()
+	print(f"Backward time: {end - start}")
