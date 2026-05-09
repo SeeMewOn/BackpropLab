@@ -27,8 +27,8 @@ class MultiHeadSelfAttention(Layer):
 		# Cache
 		self.cache = []
 
-	def predict(self, X: np.ndarray) -> np.ndarray:
-		pass
+	def predict(self, X, mask=None):
+		return self.forward(X, mask)
 
 	def forward(self, X, mask=None):
 		"""
@@ -66,7 +66,8 @@ class MultiHeadSelfAttention(Layer):
 		Y = SDPA_3d @ W_O
 
 		# Добавляем данные в кэш для расчёта бэкпропа
-		self.cache = [X, Q, K, V, SM, SDPA_3d]
+		if self.is_training:
+			self.cache = [X, Q, K, V, SM, SDPA_3d]
 		return Y
 
 	def backward(self, dL_dY):

@@ -18,6 +18,9 @@ class LayerNorm(Layer):
 		# Cache
 		self.cache = []
 
+	def predict(self, X):
+		return self.forward(X)
+
 	def forward(self, X):
 		g, b = self.params
 
@@ -28,7 +31,9 @@ class LayerNorm(Layer):
 		X_norm = X_shift * inv_std  # (B, L, D)
 		Y = g * X_norm + b
 
-		self.cache = [X_norm, X_shift, inv_std]
+		# Добавляем данные в кэш для расчёта бэкпропа
+		if self.is_training:
+			self.cache = [X_norm, X_shift, inv_std]
 		return Y
 
 	def backward(self, dL_dY):

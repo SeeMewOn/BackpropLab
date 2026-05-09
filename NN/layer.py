@@ -21,4 +21,9 @@ class Layer:
 	def backward(self, dL_dout: np.ndarray) -> np.ndarray:
 		raise NotImplementedError
 
+	def train(self):
+		self.is_training = True
+
+	def eval(self):
+		self.is_training = False
 
