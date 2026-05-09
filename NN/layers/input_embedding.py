@@ -5,12 +5,28 @@ from utils.backend import np
 
 
 class InputEmbedding(Layer):
-	def __init__(self, vocab_size: int, d_model: int):
+	def __init__(self, vocab_size: int, d_model: int, shared_params:dict=None):
+		"""
+		Для реализации Weight Tying необходимо, чтобы у первого слоя
+		языковой модели (InputEmbedding) и предпоследнего её слоя (Dense)
+		была общая матрица весов.
+
+		Градиент целевой функции по этой матрице - это сумма производных
+		функции потерь по W от InputEmbedding и Dense слоёв. Поэтому,
+		помимо self.params у этих слоёв должен быть общий self.grads
+
+		shared_params - это словарь {"params": params, "grads": grads}
+		"""
 		super().__init__()
 		# Trainable params
-		# Random init
-		W = np.random.randn(vocab_size, d_model).astype(np.float32) * 0.01
-		self.params = [W]
+		if shared_params:
+			self.params = shared_params["params"]
+			self.grads = shared_params["grads"]
+		else:
+			# Random init
+			W = np.random.randn(vocab_size, d_model).astype(np.float32) * 0.01
+			self.params = [W]
+			self.grads = [np.zeros_like(W)]
 
 		# Cache
 		self.X = None
@@ -58,7 +74,9 @@ class InputEmbedding(Layer):
 		# - Если индекс повторяется, она прибавит следующее значение к уже измененному результату.
 
 		np.add.at(dL_dW, self.X, dL_dY)
-		self.grads = [dL_dW]
+
+		# self.grads = [dL_dW] (OLD)
+		self.grads[0] += dL_dW
 
 		# dL_dX не вычисляется, так как X - это вход в
 		# нейронную сеть - батч последовательностей token id.
@@ -66,8 +84,8 @@ class InputEmbedding(Layer):
 
 
 if __name__ == '__main__':
-	x = np.random.randint(low=0, high=15999,size=(32, 1024)) # (B, L)
-	grad = np.random.rand(32, 1024, 512).astype(np.float32) # (B, L, D)
+	x = np.random.randint(low=0, high=15999, size=(32, 1024))  # (B, L)
+	grad = np.random.rand(32, 1024, 512).astype(np.float32)  # (B, L, D)
 	emb = InputEmbedding(16000, 512)
 
 	# Forward test

@@ -27,3 +27,6 @@ class Layer:
 	def eval(self):
 		self.is_training = False
 
+	def zero_grad(self):
+		for grad in self.grads:
+			grad.fill(0.0)
