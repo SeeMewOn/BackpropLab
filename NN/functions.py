@@ -13,6 +13,28 @@ def softmax(X):
 	return X_exp / sum_exp
 
 
+def get_combined_mask(X, pad_token_id=0):
+	"""
+	X_indices: (B, L) - токены
+	"""
+	B, L = X.shape
+
+	# 1. Causal Mask: (L, L)
+	# Создаем матрицу, где выше главной диагонали стоят 1.
+	# Это "запрет смотреть вперёд"
+	causal_mask = np.triu(np.ones((L, L)), k=1).astype(np.bool_)
+
+	# 2. Padding Mask: (B, 1, 1, L)
+	# Помечаем True там, где стоит PAD токен
+	padding_mask = (X == pad_token_id)
+	padding_mask = padding_mask[:, np.newaxis, np.newaxis, :]
+
+	# 3. Объединяем их через логическое ИЛИ
+	# Если токен "в будущем" ИЛИ он "паддинг" -> маскируем (True)
+	combined_mask = causal_mask | padding_mask
+
+	return combined_mask  # (B, 1, L, L)
+
 def im2tensor(img_path, target_size=(64, 64), augment=False):
 	img = Image.open(img_path).convert("RGB")
 
