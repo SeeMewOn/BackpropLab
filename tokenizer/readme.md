@@ -1,0 +1,1 @@
+Код был взят из https://github.com/karpathy/minbpe

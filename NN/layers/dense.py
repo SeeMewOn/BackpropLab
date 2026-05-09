@@ -68,7 +68,7 @@ if __name__ == '__main__':
         layer.backward(fake_grad)
         # print(f"\r{t}", end="")
         print(t)
-
+    
     print()
     end = time.time()
     print(f"Backward time: {end - start}")

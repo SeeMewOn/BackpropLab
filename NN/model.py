@@ -20,6 +20,10 @@ class Model:
 
 		return out
 
+	# TODO save_params & load_params внутри каждого слоя?
+	#  (решится проблема загрузки/сохранения параметров)
+	#  save_params & load_params в этом классе так же оставить,
+	#  только в них уже будет вызываться save_params & load_params слоёв
 	def save_params(self, path: str):
 		params_dict = {}
 		for i, layer in enumerate(self.layers):

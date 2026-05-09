@@ -6,8 +6,9 @@ __pycache__/
 .venv/
 .env
 
-# ==== PyCharm / IntelliJ ====
+# ==== PyCharm / IntelliJ / VS Code ====
 .idea/
+.vscode/
 
 # ==== Данные для обучения моделей ====
 data/
