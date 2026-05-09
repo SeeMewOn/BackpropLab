@@ -1,13 +1,12 @@
 import time
 
-
+from NN.layers.gelu import GELU
 from utils.backend import np
 from NN.layer import Layer
 from NN.layers.dense import Dense
 from NN.layers.dropout import Dropout
 from NN.layers.layer_norm import LayerNorm
 from NN.layers.multi_head_attention import MultiHeadSelfAttention
-from NN.layers.relu import ReLU
 
 
 class TransformerBlock(Layer):
@@ -21,7 +20,7 @@ class TransformerBlock(Layer):
 		# Linear module & skip connection
 		self.ln2 = LayerNorm(d_model)
 		self.dense1 = Dense(d_model, 4 * d_model)
-		self.gelu = ReLU()  # TODO GELU
+		self.gelu = GELU()
 		self.dense2 = Dense(4 * d_model, d_model)
 		self.dropout2 = Dropout(0.1)
 
@@ -100,25 +99,27 @@ if __name__ == '__main__':
 
 	# (B, L, D)
 	B, L, D, H = 32, 1024, 512, 8
-	tensor = np.random.rand(B, L, D)
+
 	transformer_block = TransformerBlock(D, H)
 
 	# Forward test
 	start = time.time()
 	for t in range(10):
+		tensor = np.random.rand(B, L, D)
 		transformer_block.forward(tensor)
 		print(f"\r{t}", end="")
 
-	print()
 	end = time.time()
+	print()
 	print(f"Forward time: {end - start}")
 
 	# Backward test
 	start = time.time()
 	for t in range(10):
+		tensor = np.random.rand(B, L, D)
 		transformer_block.backward(tensor)
 		print(f"\r{t}", end="")
 
-	print()
 	end = time.time()
+	print()
 	print(f"Backward time: {end - start}")
