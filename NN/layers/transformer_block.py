@@ -94,6 +94,16 @@ class TransformerBlock(Layer):
 		self.dense2.eval()
 		self.dropout2.eval()
 
+	def zero_grad(self):
+		self.ln1.zero_grad()
+		self.mha.zero_grad()
+		self.dropout1.zero_grad()
+		self.ln2.zero_grad()
+		self.dense1.zero_grad()
+		self.gelu.zero_grad()
+		self.dense2.zero_grad()
+		self.dropout2.zero_grad()
+
 
 if __name__ == '__main__':
 
