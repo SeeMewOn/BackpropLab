@@ -15,10 +15,9 @@ if __name__ == '__main__':
 	model = LanguageModel(vocab_size, d_model, context_size)
 
 	# TODO загрузка реального датасета текстов + контролируемое рандомное перемешивание
-	# TODO метки лучше создавать налету внутри циклов или сразу в начале?
 	# Dataset load
 	X_full = np.random.randint(low=0, high=vocab_size, size=(1_000_000, context_size)) # (Total, L)
-	T_full = np.random.randint(low=0, high=vocab_size, size=(1_000_000, context_size)) # (Total, L)
+	# T_full = np.random.randint(low=0, high=vocab_size, size=(1_000_000, context_size)) # (Total, L)
 	pad_token_id = 0
 
 	val_size = int(X_full.shape[0] * val_total_ratio)
@@ -26,7 +25,7 @@ if __name__ == '__main__':
 
 	# splitting the dataset into training and validation
 	X_train = X_full[val_size:]
-	X_val = X_full[val_size:]
+	X_val = X_full[:val_size]
 
 	for epoch in range(epochs):
 
@@ -39,18 +38,17 @@ if __name__ == '__main__':
 			# TODO не вычислять padding mask 2 раза.
 			#  Вычислить один раз и инвертировать.
 			# Combined mask. 1 - выше главной диагонали и на месте PAD токенов. 0 - содержательные токены
-			mask = get_combined_mask(X_full, pad_token_id)  # (B, 1, L, L)
-
+			mask = get_combined_mask(X, pad_token_id)  # (B, 1, L, L)
 			# Padding mask. 1 - содержательные токены
 			padding_mask = X != pad_token_id
 
 			# FORWARD
-			model.tarin()
+			model.train()
 			Y = model.forward(X, mask)
 
 			# BACKWARD
-			model.backward(Y, padding_mask)
+			# model.backward(T, padding_mask)
 
 			# STEP
-			# ...
+			# TODO optimizer.step()
 			model.zero_grad()

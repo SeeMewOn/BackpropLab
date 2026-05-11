@@ -83,7 +83,7 @@ class LanguageModel:
 		self.dense.eval()
 		self.softmax_cross_entropy.eval()
 
-	def tarin(self):
+	def train(self):
 		self.input_embedding.train()
 		self.positional_embedding.train()
 		self.transformer_block_1.train()

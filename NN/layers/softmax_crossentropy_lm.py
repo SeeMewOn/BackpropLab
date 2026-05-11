@@ -24,19 +24,24 @@ class SoftmaxCrossEntropy(Layer):
 		self.Y = Y
 		return Y
 
-	def loss(self, T) -> float: # TODO вынести расчёт loss из этого класса
+	def loss(self, Y, T, padding_mask=None) -> float:  # TODO вынести расчёт loss из этого класса
 		"""
 		Вычисляет скалярный Loss
 		T: (B, L) - индексы правильных токенов
 		"""
-		B, L, V = self.Y.shape
+		B, L, V = Y.shape
 		# Используем продвинутую индексацию numpy/cupy, чтобы достать
 		# только нужные вероятности.
 		batch_idx = np.arange(B)[:, None]  # (B, 1)
 		seq_idx = np.arange(L)[None, :]  # (1, L)
 
 		# Выбираем вероятности правильных классов
-		probs = self.Y[batch_idx, seq_idx, T]
+		probs = Y[batch_idx, seq_idx, T]
+
+		if padding_mask is not None:
+			probs *= padding_mask
+			loss = -np.sum(np.log(probs + 1e-10)) / np.sum(padding_mask)
+			return float(loss)
 
 		# Добавляем маленькое число (eps), чтобы не было log(0)
 		loss = -np.mean(np.log(probs + 1e-10))
@@ -51,8 +56,8 @@ class SoftmaxCrossEntropy(Layer):
 		B, L, V = self.Y.shape
 
 		# Создаем сетку индексов
-		batch_idx = np.arange(B)[:, None] # (B, 1)
-		seq_idx = np.arange(L)[None, :] # (1, L)
+		batch_idx = np.arange(B)[:, None]  # (B, 1)
+		seq_idx = np.arange(L)[None, :]  # (1, L)
 
 		# Вычитаем единицу только там, где стоит правильный токен
 		dL_dX = self.Y.copy()  # Копируем вероятности (B, L, V)
