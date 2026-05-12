@@ -7,7 +7,7 @@ from NN.layers.dense import Dense
 from NN.layers.relu import ReLU
 from NN.layers.softmax_crossentropy import SoftmaxCrossEntropy
 from NN.model import Model
-from NN.optimizer import Optimizer
+from NN.optimizer import OptimizerOld
 from NN.functions import shuffle_dataset, cross_entropy, confusion_matrix
 
 
@@ -113,7 +113,7 @@ if __name__ == '__main__':
     save_step = 5
 
     model = MLP3v1()
-    optim = Optimizer(model, lr)
+    optim = OptimizerOld(model, lr)
 
     # Data load
     test_images = read_idx3_ubyte('data/MNIST/t10k-images.idx3-ubyte')  # Читаем тестовые изображения

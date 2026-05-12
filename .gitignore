@@ -13,3 +13,6 @@ __pycache__/
 # ==== Данные для обучения моделей ====
 data/
 experiments/
+
+# ==== Deprecated ====
+deprecated/

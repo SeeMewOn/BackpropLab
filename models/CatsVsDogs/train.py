@@ -15,7 +15,7 @@ from NN.layers.relu import ReLU
 from NN.layers.softmax_crossentropy import SoftmaxCrossEntropy
 from NN.layers.zeropad import ZeroPad
 from NN.model import Model
-from NN.optimizer import Optimizer
+from NN.optimizer import OptimizerOld
 from NN.functions import shuffle_dataset, confusion_matrix, cross_entropy, im2tensor
 
 
@@ -118,7 +118,7 @@ if __name__ == '__main__':
 	ts = (64, 64)
 
 	model = CnnCatDogV4BN()
-	optim = Optimizer(model, lr)
+	optim = OptimizerOld(model, lr)
 
 	# Data load
 	print("DATA LOADING...")

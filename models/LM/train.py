@@ -6,7 +6,7 @@ from utils.backend import np
 
 
 if __name__ == '__main__':
-	epochs = 10
+	epochs = 2
 	batch_size = 8
 	val_total_ratio = 0.2
 	vocab_size = 16000
@@ -17,7 +17,6 @@ if __name__ == '__main__':
 	# TODO загрузка реального датасета текстов + контролируемое рандомное перемешивание
 	# Dataset load
 	X_full = np.random.randint(low=0, high=vocab_size, size=(1_000_000, context_size)) # (Total, L)
-	# T_full = np.random.randint(low=0, high=vocab_size, size=(1_000_000, context_size)) # (Total, L)
 	pad_token_id = 0
 
 	val_size = int(X_full.shape[0] * val_total_ratio)
