@@ -24,6 +24,12 @@ class TransformerBlock(Layer):
 		self.dense2 = Dense(4 * d_model, d_model)
 		self.dropout2 = Dropout(0.1)
 
+		# All layers
+		self.layers = [
+			self.ln1, self.mha, self.dropout1,
+			self.ln2, self.dense1, self.gelu, self.dense2, self.dropout2
+		]
+
 	def predict(self, X, mask=None):
 		# Attention module & skip connection
 		out1 = self.ln1.predict(X)
@@ -74,35 +80,26 @@ class TransformerBlock(Layer):
 
 	def train(self):
 		super().train()
-		self.ln1.train()
-		self.mha.train()
-		self.dropout1.train()
-		self.ln2.train()
-		self.dense1.train()
-		self.gelu.train()
-		self.dense2.train()
-		self.dropout2.train()
+		for layer in self.layers:
+			layer.train()
 
 	def eval(self):
 		super().eval()
-		self.ln1.eval()
-		self.mha.eval()
-		self.dropout1.eval()
-		self.ln2.eval()
-		self.dense1.eval()
-		self.gelu.eval()
-		self.dense2.eval()
-		self.dropout2.eval()
+		for layer in self.layers:
+			layer.eval()
 
 	def zero_grad(self):
-		self.ln1.zero_grad()
-		self.mha.zero_grad()
-		self.dropout1.zero_grad()
-		self.ln2.zero_grad()
-		self.dense1.zero_grad()
-		self.gelu.zero_grad()
-		self.dense2.zero_grad()
-		self.dropout2.zero_grad()
+		for layer in self.layers:
+			layer.zero_grad()
+
+	def get_params(self):
+		params = []
+		grads = []
+		for layer in self.layers:
+			p, g = layer.get_params()
+			params.extend(p)
+			grads.extend(g)
+		return params, grads
 
 
 if __name__ == '__main__':

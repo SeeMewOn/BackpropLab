@@ -86,17 +86,17 @@ class BatchNorm(Layer):
 
         return out_2d
 
-    def backward(self, dL_dout: np.ndarray) -> np.ndarray:
+    def backward(self, dL_dY: np.ndarray) -> np.ndarray:
         gamma, beta = self.params
         X_norm_2d, X_2d, mean, var = self.buffer
         m, _ = X_2d.shape
 
         # Если BN стоит после Conv
-        dL_dout_2d = dL_dout
-        if dL_dout.ndim == 4:
+        dL_dout_2d = dL_dY
+        if dL_dY.ndim == 4:
             # (N, C, H, W) -> (C, N, H, W) -> (C, N * H * W) -> (N * H * W, C)
-            N, C, H, W = dL_dout.shape
-            dL_dout_2d = dL_dout.transpose(0, 2, 3, 1).reshape(-1, C)
+            N, C, H, W = dL_dY.shape
+            dL_dout_2d = dL_dY.transpose(0, 2, 3, 1).reshape(-1, C)
 
         # TODO Оптимизировать расчёты
         # Grads calc
@@ -116,9 +116,9 @@ class BatchNorm(Layer):
             self.grads = [dL_dgamma, dL_dbeta]
 
         # Если BN стоит после Conv
-        if dL_dout.ndim == 4:
+        if dL_dY.ndim == 4:
             # (N * H * W, C) -> (N, H, W, C) -> (N, C, H, W)
-            N, C, H, W = dL_dout.shape
+            N, C, H, W = dL_dY.shape
             dL_dX_2d = dL_dX_2d.reshape(N, H, W, C).transpose(0, 3, 1, 2)
 
         return dL_dX_2d

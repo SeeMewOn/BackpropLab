@@ -40,6 +40,15 @@ class LanguageModel:
 		self.dense = Dense(d_model, vocab_size, shared_params={"params": [W, b], "grads": [dL_dW, dL_db]})
 		self.softmax_cross_entropy = SoftmaxCrossEntropy()
 
+		# Список слоёв
+		self.layers = [
+			self.input_embedding, self.positional_embedding,
+			self.transformer_block_1, self.transformer_block_2,
+			self.transformer_block_3, self.transformer_block_4,
+			self.transformer_block_5, self.transformer_block_6,
+			self.layer_norm, self.dense, self.softmax_cross_entropy
+		]
+
 	def forward(self, X, mask=None):
 		# Маска для scaled dot-product attention
 		# mask = get_combined_mask(X, pad_token_id=0)
@@ -71,43 +80,35 @@ class LanguageModel:
 		out = self.input_embedding.backward(out)
 
 	def eval(self):
-		self.input_embedding.eval()
-		self.positional_embedding.eval()
-		self.transformer_block_1.eval()
-		self.transformer_block_2.eval()
-		self.transformer_block_3.eval()
-		self.transformer_block_4.eval()
-		self.transformer_block_5.eval()
-		self.transformer_block_6.eval()
-		self.layer_norm.eval()
-		self.dense.eval()
-		self.softmax_cross_entropy.eval()
+		for layer in self.layers:
+			layer.eval()
+
 
 	def train(self):
-		self.input_embedding.train()
-		self.positional_embedding.train()
-		self.transformer_block_1.train()
-		self.transformer_block_2.train()
-		self.transformer_block_3.train()
-		self.transformer_block_4.train()
-		self.transformer_block_5.train()
-		self.transformer_block_6.train()
-		self.layer_norm.train()
-		self.dense.train()
-		self.softmax_cross_entropy.train()
+		for layer in self.layers:
+			layer.train()
+
 
 	def zero_grad(self):
-		self.input_embedding.zero_grad()
-		self.positional_embedding.zero_grad()
-		self.transformer_block_1.zero_grad()
-		self.transformer_block_2.zero_grad()
-		self.transformer_block_3.zero_grad()
-		self.transformer_block_4.zero_grad()
-		self.transformer_block_5.zero_grad()
-		self.transformer_block_6.zero_grad()
-		self.layer_norm.zero_grad()
-		self.dense.zero_grad()
-		self.softmax_cross_entropy.zero_grad()
+		for layer in self.layers:
+			layer.zero_grad()
+
+	def get_params(self):
+
+		# Так как у первого слоя модели (InputEmbedding) и
+		# предпоследнего (Dense) общие параметры (Weight Tying),
+		# то для получения списка параметров и списка градиентов
+		# для всей языковой модели нужно итерироваться начиная
+		# со второго слоя. В противном случае мы дважды
+		# скорректируем матрицу W и вектор b.
+		params = []
+		grads = []
+		for layer in self.layers[1:]:
+			p, g = layer.get_params()
+			params.extend(p)
+			grads.extend(g)
+		return params, grads
+
 
 if __name__ == '__main__':
 	lm = LanguageModel()
