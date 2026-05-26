@@ -96,9 +96,12 @@ class TransformerBlock(Layer):
 		params = []
 		grads = []
 		for layer in self.layers:
-			p, g = layer.get_params()
-			params.extend(p)
-			grads.extend(g)
+			p_list, g_list = layer.get_params()
+			for p, g in zip(p_list, g_list):
+				params.append(p)
+				grads.append(g)
+		# for par, gr in zip(params, grads):
+		# 	print(par.shape, gr.shape)
 		return params, grads
 
 

@@ -34,8 +34,8 @@ class LanguageModel:
 		self.transformer_block_2 = TransformerBlock(d_model, 8)
 		self.transformer_block_3 = TransformerBlock(d_model, 8)
 		self.transformer_block_4 = TransformerBlock(d_model, 8)
-		self.transformer_block_5 = TransformerBlock(d_model, 8)
-		self.transformer_block_6 = TransformerBlock(d_model, 8)
+		# self.transformer_block_5 = TransformerBlock(d_model, 8)
+		# self.transformer_block_6 = TransformerBlock(d_model, 8)
 		self.layer_norm = LayerNorm(d_model)
 		self.dense = Dense(d_model, vocab_size, shared_params={"params": [W, b], "grads": [dL_dW, dL_db]})
 		self.softmax_cross_entropy = SoftmaxCrossEntropy()
@@ -45,7 +45,7 @@ class LanguageModel:
 			self.input_embedding, self.positional_embedding,
 			self.transformer_block_1, self.transformer_block_2,
 			self.transformer_block_3, self.transformer_block_4,
-			self.transformer_block_5, self.transformer_block_6,
+			# self.transformer_block_5, self.transformer_block_6,
 			self.layer_norm, self.dense, self.softmax_cross_entropy
 		]
 
@@ -59,8 +59,8 @@ class LanguageModel:
 		out = self.transformer_block_2.forward(out, mask)
 		out = self.transformer_block_3.forward(out, mask)
 		out = self.transformer_block_4.forward(out, mask)
-		out = self.transformer_block_5.forward(out, mask)
-		out = self.transformer_block_6.forward(out, mask)
+		# out = self.transformer_block_5.forward(out, mask)
+		# out = self.transformer_block_6.forward(out, mask)
 		out = self.layer_norm.forward(out)
 		out = self.dense.forward(out)
 		out = self.softmax_cross_entropy.forward(out)
@@ -70,8 +70,8 @@ class LanguageModel:
 		out = self.softmax_cross_entropy.backward(T, padding_mask)
 		out = self.dense.backward(out)
 		out = self.layer_norm.backward(out)
-		out = self.transformer_block_6.backward(out)
-		out = self.transformer_block_5.backward(out)
+		# out = self.transformer_block_6.backward(out)
+		# out = self.transformer_block_5.backward(out)
 		out = self.transformer_block_4.backward(out)
 		out = self.transformer_block_3.backward(out)
 		out = self.transformer_block_2.backward(out)
@@ -104,9 +104,12 @@ class LanguageModel:
 		params = []
 		grads = []
 		for layer in self.layers[1:]:
-			p, g = layer.get_params()
-			params.extend(p)
-			grads.extend(g)
+			p_list, g_list = layer.get_params()
+			for p, g in zip(p_list, g_list):
+				params.append(p)
+				grads.append(g)
+		# for par, gr in zip(params, grads):
+		# 	print(par.shape, gr.shape)
 		return params, grads
 
 

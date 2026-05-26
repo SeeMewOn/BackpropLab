@@ -44,6 +44,9 @@ class Optimizer:
 
 class Adam(Optimizer):
 	def __init__(self, params, lr=0.01, beta1=0.9, beta2=0.999, eps=1e-8, weight_decay=0.01):
+		"""
+		:param params: кортеж списков (params, grads).
+		"""
 		super().__init__(params, lr)
 		self.beta1 = beta1
 		self.beta2 = beta2

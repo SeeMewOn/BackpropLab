@@ -5,20 +5,18 @@ from utils.backend import np
 
 from NN.layer import Layer
 
-
 class MultiHeadSelfAttention(Layer):
 	def __init__(self, d_model, n_head):
 		super().__init__()
 		# Trainable params
-		# Xavier init
+		# Инициализируем сразу целиком
+		# Объединяем W_Q, W_K, W_V в одну матрицу (D, 3 * D)
 		limit = np.sqrt(6 / (d_model + d_model))
-		W_Q = np.random.uniform(-limit, limit, (d_model, d_model)).astype(np.float32)
-		# W_Q = np.zeros((d_model, d_model)).astype(np.float32)
-		W_K = np.random.uniform(-limit, limit, (d_model, d_model)).astype(np.float32)
-		W_V = np.random.uniform(-limit, limit, (d_model, d_model)).astype(np.float32)
+		W_QKV = np.random.uniform(-limit, limit, (d_model, 3 * d_model)).astype(np.float32)
 		W_O = np.random.uniform(-limit, limit, (d_model, d_model)).astype(np.float32)
-		self.params = [W_Q, W_K, W_V, W_O]
-		self.grads = [np.zeros_like(W_Q), np.zeros_like(W_K), np.zeros_like(W_V), np.zeros_like(W_O)]
+
+		self.params = [W_QKV, W_O]
+		self.grads = [np.zeros_like(W_QKV), np.zeros_like(W_O)]
 
 		# Hyperparams
 		# self.d_model = d_model
@@ -36,32 +34,34 @@ class MultiHeadSelfAttention(Layer):
 		X: (batch_size, sequence_length, d_model) или (B, L, D)
 		"""
 		B, L, D = X.shape
-		W_Q, W_K, W_V, W_O = self.params
+		W_QKV, W_O = self.params
 
 		# (B, L, D) @ (D, D) -> (B, L, D)
-		Q = X @ W_Q
-		K = X @ W_K
-		V = X @ W_V
+		# Q = X @ W_Q
+		# K = X @ W_K
+		# V = X @ W_V
 
-		# Подготовка тензоров для входа в scaled_dot_product_attention
-		# (B, L, D) -> (B, L, H, d_h)
-		Q = Q.reshape(B, L, self.n_head, self.d_head)
-		K = K.reshape(B, L, self.n_head, self.d_head)
-		V = V.reshape(B, L, self.n_head, self.d_head)
+		# Один большой проход: (B, L, D) @ (D, 3*D) -> (B, L, 3*D)
+		qkv = X @ W_QKV
 
-		# (B, L, H, d_h) -> (B, H, L, d_h)
-		Q = Q.transpose(0, 2, 1, 3)
-		K = K.transpose(0, 2, 1, 3)
-		V = V.transpose(0, 2, 1, 3)
+		# Режем на Q, K, V и головы одновременно
+		# (B, L, 3*D) -> (B, L, 3, H, d_h)
+		qkv = qkv.reshape(B, L, 3, self.n_head, self.d_head)
+
+
+		# Переставляем оси так, чтобы 3 (QKV) была на первом месте после батча
+		# (B, L, 3, H, d_h) -> (3, B, H, L, d_h)
+		qkv = qkv.transpose(2, 0, 3, 1, 4)
+		Q, K, V = qkv[0], qkv[1], qkv[2]
 
 		# Подаём полученные тензоры в SDPA. (B, H, L, d_h) -> (B, H, L, d_h)
 		SDPA, SM = scaled_dot_product_attention(Q, K, V, mask)
 
-		# (B, H, L, d_h) -> (B, L, H, d_h)
-		SDPA = SDPA.transpose(0, 2, 1, 3)
+		# (B, H, L, d_h) -> (B, L, H, d_h) -> (B, L, D)
+		SDPA = SDPA.transpose(0, 2, 1, 3).reshape(B, L, D)
 
-		# (B, L, H, d_h) -> (B, L, D)
-		SDPA = SDPA.reshape(B, L, D)
+
+
 
 		# (B, L, D) ->  (B, L, D)
 		Y = SDPA @ W_O
@@ -72,7 +72,7 @@ class MultiHeadSelfAttention(Layer):
 		return Y
 
 	def backward(self, dL_dY):
-		W_Q, W_K, W_V, W_O = self.params
+		W_QKV, W_O = self.params
 		X, Q, K, V, SM, SDPA_3d = self.cache
 		B, L, D = X.shape
 
@@ -107,22 +107,35 @@ class MultiHeadSelfAttention(Layer):
 		dL_dK = dL_dK.reshape(B, L, D)
 		dL_dV = dL_dV.reshape(B, L, D)
 
-		# 6. dL_dX
-		# (B, L, D) @ (D, D) + (B, L, D) @ (D, D) + (B, L, D) @ (D, D) = (B, L, D)
-		dL_dX = dL_dQ @ W_Q.T + dL_dK @ W_K.T + dL_dV @ W_V.T
+		# # 6. dL_dX
+		# # (B, L, D) @ (D, D) + (B, L, D) @ (D, D) + (B, L, D) @ (D, D) = (B, L, D)
+		# dL_dX = dL_dQ @ W_Q.T + dL_dK @ W_K.T + dL_dV @ W_V.T
 
-		# 7. dL_dW_Q, dL_dW_K, dL_dW_V
-		# (B, L, D) -> (B*L, D)
-		X = X.reshape(-1, D)
-		dL_dQ = dL_dQ.reshape(-1, D)
-		dL_dK = dL_dK.reshape(-1, D)
-		dL_dV = dL_dV.reshape(-1, D)
-		# (D, B*L) @ (B*L, D) -> (D, D)
-		dL_dW_Q = X.T @ dL_dQ
-		dL_dW_K = X.T @ dL_dK
-		dL_dW_V = X.T @ dL_dV
+		# 1. Склеиваем градиенты по Q, K, V в один тензор (B, L, 3*D)
+		# np.concatenate — довольно быстрая операция
+		dL_dQKV_3d = np.concatenate([dL_dQ, dL_dK, dL_dV], axis=-1)
 
-		self.grads = [dL_dW_Q, dL_dW_K, dL_dW_V, dL_dW_O]
+		# # 7. dL_dW_Q, dL_dW_K, dL_dW_V
+		# # (B, L, D) -> (B*L, D)
+		# X = X.reshape(-1, D)
+		# dL_dQ = dL_dQ.reshape(-1, D)
+		# dL_dK = dL_dK.reshape(-1, D)
+		# dL_dV = dL_dV.reshape(-1, D)
+		# # (D, B*L) @ (B*L, D) -> (D, D)
+		# dL_dW_Q = X.T @ dL_dQ
+		# dL_dW_K = X.T @ dL_dK
+		# dL_dW_V = X.T @ dL_dV
+
+		# 2. Считаем градиент по общей матрице W_QKV
+		X_flat = X.reshape(-1, D)
+		dL_dQKV_flat = dL_dQKV_3d.reshape(-1, 3 * D)
+		dL_dW_QKV = X_flat.T @ dL_dQKV_flat  # (D, B*L) @ (B*L, 3*D) -> (D, 3*D)
+
+		# 3. Считаем dL_dX (используем всю W_QKV целиком)
+		# (B, L, 3*D) @ (3*D, D) -> (B, L, D)
+		dL_dX = dL_dQKV_3d @ W_QKV.T
+
+		self.grads = [dL_dW_QKV, dL_dW_O]
 		return dL_dX
 
 
@@ -138,34 +151,3 @@ def scaled_dot_product_attention(Q, K, V, mask=None):
 	SM = softmax(logits)
 	Y = SM @ V
 	return Y, SM
-
-
-# def self_attention(X, mask=None):
-# 	return scaled_dot_product_attention(X, X, X, mask)
-
-
-if __name__ == '__main__':
-
-	# (B, L, D)
-	tensor = np.random.rand(32, 1024, 512)
-	mha = MultiHeadSelfAttention(512, 4)
-
-	# Forward test
-	start = time.time()
-	for t in range(100):
-		mha.forward(tensor)
-		print(f"\r{t}", end="")
-
-	print()
-	end = time.time()
-	print(f"Forward time: {end - start}")
-
-	# Backward test
-	start = time.time()
-	for t in range(100):
-		mha.backward(tensor)
-		print(f"\r{t}", end="")
-
-	print()
-	end = time.time()
-	print(f"Backward time: {end - start}")

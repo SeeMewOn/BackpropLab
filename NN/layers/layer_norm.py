@@ -11,6 +11,7 @@ class LayerNorm(Layer):
 		g = np.ones(d_model).astype(np.float32)
 		b = np.zeros(d_model).astype(np.float32)
 		self.params = [g, b]
+		self.grads = [np.zeros_like(g), np.zeros_like(b)]
 
 		# Hyperparams
 		self.eps = eps
