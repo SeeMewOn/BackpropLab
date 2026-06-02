@@ -31,51 +31,65 @@ import unicodedata
 DS_DIR = "../../../data/OIMASIRUTEXT"
 CLEANED_DIR = "../../../data/CLEANED_OIMASIRUTEXT"
 
-DS_FILES = [
-	f"{DS_DIR}/merged_data_1.txt",
-	f"{DS_DIR}/merged_data_2.txt",
-	f"{DS_DIR}/merged_data_3.txt",
-	f"{DS_DIR}/merged_data_4.txt",
-	f"{DS_DIR}/merged_data_5.txt",
-	f"{DS_DIR}/merged_data_6.txt",
-	f"{DS_DIR}/merged_data_7.txt",
-]
-
-OUT_FILES = [
-	f"{CLEANED_DIR}/cleaned_data_1.txt",
-	f"{CLEANED_DIR}/cleaned_data_2.txt",
-	f"{CLEANED_DIR}/cleaned_data_3.txt",
-	f"{CLEANED_DIR}/cleaned_data_4.txt",
-	f"{CLEANED_DIR}/cleaned_data_5.txt",
-	f"{CLEANED_DIR}/cleaned_data_6.txt",
-	f"{CLEANED_DIR}/cleaned_data_7.txt",
-]
-
 # === REGEX ПАТТЕРНЫ ДЛЯ ФИЛЬТРАЦИИ ===
-RE_SPACES = re.compile(r"\s+")
+
 RE_COMPLETED = re.compile(r'[.!?…]["»]?$')  # Строка не завершена
 RE_META = re.compile(
+	r"[a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\.[a-zA-Z0-9._-]+|"  # Электронная почта
 	r"Сконвертировано и опубликовано на|"
 	r"Текст предоставлен ООО|"
 	r"ЛитРес|"
 	r"Fb2\.zipEpub|"
 	r"copyright|"
-	r"^Популярность: \d+|"
+	r"^популярность:[\s\t]+\*{0,2}?\d+|"
 	r"Royallib|"
 	r"^Оставить отзыв о книге:|"
 	r"^Эта же книга в других форматах:|"
 	r"^Все книги автора:|"
-	r"^(\d+.)+$"  # TODO переместить в RE_SINGLE_NUMBER
-)
-RE_AUTHORS = re.compile(r"^Кукаркин Евгений|")
-RE_MAIL = re.compile(r"")  # TODO MAIL FILTER
-RE_DIVIDER = re.compile(r"^(\.\s){3,}|^[-–—]{3,}")
-# Строки, начинающиеся на число (опционально) и "глава", "часть" и прочее.
-RE_TITLE = re.compile(
-	r'^(\d+|[IVXLCDM]+)?\.?\s?(глава|часть|книга|аннотация|введение|пролог|эпилог|рассказ|предисловие)[.\s](\d+|[IVXLCDM]+|$)?.*[^.!?…]["»]?$',
+	r"\.txt|"
+	r"\.htm|"
+	r"\.jpg|"
+	r"\.gif|"
+	r"\[Электронный ресурс]|"
+	r"^\d+ (\.\.)?(/.*)*$",  # 4 /dir/dir.ext
 	re.IGNORECASE
 )
-RE_SINGLE_NUMBER = re.compile(r"^\d+$")
+TRASH_BOOKS = [
+	# 2
+	"Андрей Богатырев. Хрестоматия по программированию на Си в Unix", "ВИДЕО-94",
+	"История морской культуры Южно-Китайского моря"
+]
+RE_TRASH_SECTIONS = re.compile(
+	r"^литература\.?:?$|"
+	r"^REFERENCES\.?:?$|"
+	r"^содержание\.?:?$|"
+	r"^примечания\.?:?$|"
+	r"^оглавление\.?:?$|"
+	r"^БИБЛИОГРАФИЧЕСКИЕ ССЫЛКИ\.?:?$|"
+	r"^БИБЛИОГРАФИЧЕСКИЕ ССЫЛКИ и объектные ресурсы\.?:?$|"
+	r"^БИБЛИОГРАФИЧЕСКИЙ СПИСОК\.?:?$|"
+	r"^БИБЛИОГРАФИЯ\.?:?$|"
+	r"^БИБЛИОГРАФИЯ издания\.?:?$|"
+	r"^БИБЛИОГРАФИЧЕСКИЙ$|"
+	r"^СПИСОК СОКРАЩЕНИЙ\.?:?$|"
+	r"^СПИСОК литературы\.?:?$|"
+	r"^СПИСОК рекомендуемой литературы\.?:?$|"
+	r"^СПИСОК ИЛЛЮСТРАЦИЙ\.?:?$|"
+	r"^СПИСОК ИСПОЛЬЗОВАННЫХ ИСТОЧНИКОВ\.?:?$|"
+	r"^СПИСОК ИСПОЛЬЗОВАННЫХ ИСТОЧНИКОВ И ЛИТЕРАТУРЫ\.?:?$|"
+	r"^СПИСОК использованной литературы\.?:?$|"
+	r"^СПИСОК использованных в работе источников\.?:?$|"
+	r"^СПИСОК ГРУППЫ\.?:?$|"
+	r"^ПРИЛОЖЕНИЕ\.?[\t\s]*[IVXLCDM]*(no )?\d*\.?:?$",
+	re.IGNORECASE
+)
+RE_AUTHORS = re.compile(r"^Кукаркин Евгений|")
+RE_DIVIDER = re.compile(r"^(\.\s){3,}|^[-–—]{3,}|^-$")
+RE_TITLE = re.compile(
+	r'^(\d+|[IVXLCDM]+)?\.?\s?(глава|часть|книга|аннотация|введение|пролог|эпилог|рассказ|предисловие)(?![а-яёА-ЯЁ])[.\s]?(\d+|[IVXLCDM]+)?(.*)?["»]?$',
+	re.IGNORECASE
+)
+RE_SINGLE_NUMBER = re.compile(r"^\d+$|^(\d+.)+$")
 RE_TOC_LINE = re.compile(r"\.{3,}(\s*)?\d+(\s*)?(стр)?\.?$")  # Ловит примеры типа: "Глава 1. Начало пути ........ 14"
 RE_BIBLIOGRAPHY = re.compile(
 	r"^\d+\.?(\s+)?.*(?:"  # Начинается с цифры и пробела, а дальше:
@@ -89,13 +103,16 @@ RE_BIBLIOGRAPHY = re.compile(
 )
 
 # Косметика
+RE_SPACES = re.compile(r"[\s\t]+")
 RE_TRANSFER = re.compile(r"[а-яa-z]-$")
 RE_START_DASH = re.compile(r"^[—–\-]{1,2}")
-RE_DASH = re.compile(r"(?<=.)[—–\-]{1,2}")
+# RE_DASH = re.compile(r"(?<=.)[—–\-]{1,2}")
+# RE_DASH = re.compile(r"[—–\-]{1,2}")
+RE_DASH = re.compile(r"(?<!^)[—–\-]{1,2}")
 RE_SEPARATE_DASH = re.compile(r"(?<!^)(?<=\s)-")
 RE_SPECIAL_SYMBOLS = re.compile(r"[\\*_#„“‘’]")
 
-# Разрешенные символы (Кириллица, базовая латиница, цифры и стандартная пунктуация)
+# Валидные символы (Кириллица, базовая латиница, цифры и стандартная пунктуация)
 RE_VALID_CHARS = re.compile(r"[а-яА-ЯёЁa-zA-Z0-9\s.,!?–—\-\"\'()«»:;№%=+*\x0c]")
 RE_LATIN_ONLY = re.compile(r"[a-zA-Z]")
 
@@ -113,6 +130,7 @@ class LineType(Enum):
 	HYPHEN = auto()  # Предложение оборвалось дефисом
 	TRANSFER = auto()  # Предложение оборвалось переносом слова
 	COMPLETED = auto()  # Завершённое предложение или параграф
+	TRASH_SECTION = auto()  # Оглавление, список литературы и прочее
 	BIBLIOGRAPHY_ITEM = auto()  # Элемент списка литературы
 	TOC_ITEM = auto()  # Элемент оглавления
 	DIVIDER = auto()  # Разделитель чего бы то ни было
@@ -122,6 +140,7 @@ class LineType(Enum):
 
 def _normalize_line(line: str) -> str:
 	""" Очистка строки от не utf-8 символов """
+	line = re.sub(r'[\u200b\u200e\u200f\u202a-\u202e]', '', line)
 	line = unicodedata.normalize("NFKC", line)
 	line = line.replace('\x0c', '').replace('\x1a', '').strip()
 	if not line:
@@ -151,16 +170,18 @@ def _clean_line(line: str) -> str:
 	line = RE_SPECIAL_SYMBOLS.sub("", line)
 	# Множественные пробелы/табуляции -> пробел
 	line = RE_SPACES.sub(" ", line)
-	# Одна или две чёрточки в начале строки -> длинное тире (начало диалога)
-	line = RE_START_DASH.sub("–", line)
+	# Одна или две чёрточки в начале строки -> длинное тире (---) (начало диалога)
+	line = RE_START_DASH.sub("—", line)
 	# Одна или две чёрточки НЕ в начале строки -> минус.
 	# (После строки кода ниже, в line НЕ ОСТАНЕТСЯ никаких чёрточек,
 	# кроме минуса, за исключением первого символа
 	# строки, если это диалог)
 	line = RE_DASH.sub("-", line)
-	# Минусы, не в начале строки -> длинное тире.
+	# Минусы, не в начале строки, с пробелом перед ним -> длинное тире.
 	# Таким образом дефисы и переносы слов сохраняются
-	line = RE_SEPARATE_DASH.sub("–", line)
+	line = RE_SEPARATE_DASH.sub("—", line)
+	line = re.sub(r"^==", "—", line)
+	line = re.sub(r"(?<!^)(?<=\s)==", "—", line)
 
 	return line.strip()
 
@@ -179,6 +200,8 @@ def _get_line_type(line: str, next_line: str = "") -> LineType:
 		return LineType.SINGLE_NUMBER
 	elif RE_DIVIDER.match(line):
 		return LineType.DIVIDER
+	elif RE_TRASH_SECTIONS.match(line):
+		return LineType.TRASH_SECTION
 	elif RE_TOC_LINE.search(line):
 		return LineType.TOC_ITEM
 	elif RE_BIBLIOGRAPHY.search(line):
@@ -192,7 +215,7 @@ def _get_line_type(line: str, next_line: str = "") -> LineType:
 	# предложение и без next_line мы не сможем определить его тип
 	elif next_line:
 		# next_line - начало диалога
-		if next_line.startswith("–"):
+		if next_line.startswith("—"):
 			return LineType.TITLE
 		# next_line - НЕ начало диалога
 		else:
@@ -200,7 +223,7 @@ def _get_line_type(line: str, next_line: str = "") -> LineType:
 				return LineType.TRANSFER
 			elif RE_TRANSFER.search(line) and not next_line[0].islower():
 				return LineType.HYPHEN
-			elif line.endswith(" –"):  # тип DASH подразумевает, что после целевой строки есть еще одна строка
+			elif line.endswith(" —"):  # тип DASH подразумевает, что после целевой строки есть еще одна строка
 				return LineType.DASH
 			elif RE_TITLE.match(line) or (not next_line[0].islower() and len(line) < 30):
 				return LineType.TITLE
@@ -213,7 +236,8 @@ def _get_line_type(line: str, next_line: str = "") -> LineType:
 def _process_document(
 		raw_lines: list,
 		not_valid_threshold: float = 0.85,
-		english_threshold: float = 0.30
+		english_threshold: float = 0.30,
+		drop_trash_sections_threshold: float = 0.80
 ) -> str:
 	"""
 	Обрабатывает один целый документ между <startoftext> и <endoftext>.
@@ -229,7 +253,7 @@ def _process_document(
 	if not raw_lines:
 		return ""
 
-	for line in raw_lines:
+	for i, line in enumerate(raw_lines):
 		line = line.strip()
 		if not line:
 			continue
@@ -244,6 +268,10 @@ def _process_document(
 				LineType.BIBLIOGRAPHY_ITEM  # TODO отсеивать после очистки?
 		):
 			continue
+
+		if line_type == LineType.TRASH_SECTION:
+			if i / len(raw_lines) > drop_trash_sections_threshold:
+				break
 
 		line = _normalize_line(line)
 		line = _filter_line(line, threshold=not_valid_threshold)
@@ -327,7 +355,7 @@ def process_corpus(
 					continue
 
 				# === Детектор Дубликатов ===
-				doc_hash = hashlib.md5(doc_text.encode('utf-8')).hexdigest()
+				doc_hash = hashlib.md5(doc_text[:3000].encode('utf-8')).hexdigest()
 				if doc_hash in seen_hashes:
 					stats["duplicates"] += 1
 					continue  # Скипаем дубликат текста
@@ -357,6 +385,32 @@ def process_corpus(
 	print(f"Время работы: {time.time() - start_time:.2f} сек.")
 
 
-if __name__ == '__main__':
+def build_dataset(ds_dir, cleaned_dir):
+	DS_FILES = [
+		# f"{ds_dir}/merged_data_1.txt",
+		f"{ds_dir}/merged_data_2.txt",
+		# f"{ds_dir}/merged_data_3.txt",
+		# f"{ds_dir}/merged_data_4.txt",
+		# f"{ds_dir}/merged_data_5.txt",
+		# f"{ds_dir}/merged_data_6.txt",
+		# f"{ds_dir}/merged_data_7.txt",
+	]
+
+	OUT_FILES = [
+# 		f"{cleaned_dir}/cleaned_data_1.txt",
+		f"{cleaned_dir}/cleaned_data_2.txt",
+		# f"{cleaned_dir}/cleaned_data_3.txt",
+		# f"{cleaned_dir}/cleaned_data_4.txt",
+		# f"{cleaned_dir}/cleaned_data_5.txt",
+		# f"{cleaned_dir}/cleaned_data_6.txt",
+		# f"{cleaned_dir}/cleaned_data_7.txt",
+	]
 	for ds_file, clean_file in zip(DS_FILES, OUT_FILES):
 		process_corpus(ds_file, clean_file)
+
+
+if __name__ == '__main__':
+	build_dataset(DS_DIR, CLEANED_DIR)
+	# for ds_file, clean_file in zip(DS_FILES, OUT_FILES):
+	# process_corpus("test.txt", "test_cleaned.txt")
+# process_corpus(DS_DIR, CLEANED_DIR)

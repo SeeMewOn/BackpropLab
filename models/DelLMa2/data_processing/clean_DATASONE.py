@@ -6,6 +6,8 @@ import unicodedata
 from datasets import load_dataset
 import re
 
+from models.DelLMa2.data_processing.shard_writer import ShardWriter
+
 DS_DIR = "../../../data/datasone_wiki"
 CLEANED_DIR = "../../../data/CLEANED_DATASONE"
 STATS_DIR = "../../../data/CLEANED_DATASONE/stats"
@@ -45,20 +47,12 @@ class ArticleType(Enum):
 # Например: «Бродский, Иосиф Александрович», «Меир, Голда».
 # Если в названии есть запятая, а после неё пробел и Большая буква — это 100% человек.
 RE_BIO = re.compile(r'^[А-ЯЁа-яё\-\'’]+\s*,\s+[А-ЯЁ]')  # "Фамилия, Имя" или что-то имени кого-то
-# RE_BIO = re.compile(
-#     r'^[А-ЯЁ][а-яё\-’\']+'          # Первая часть фамилии (с заглавной, буквы/дефисы/апострофы)
-#     r'(?:\s+[А-ЯЁ][а-яё\-’\']+){0,2}' # Возможные 2-е и 3-е слова фамилии (напр. "Сантус" или "Борда")
-#     r'\s*,\s*'                        # Запятая с возможными пробелами вокруг
-#     r'[А-ЯЁ][а-яё\-’\']+'          # Имя (ОБЯЗАТЕЛЬНО с заглавной буквы)
-#     r'(?:\s+[А-ЯЁ][а-яё\-’\']+){0,2}' # Возможные Отчество / второе имя (с заглавной)
-#     r'(?:\s*\(.+\))?$'                # Необязательное уточнение в скобках на конце, напр. "(физик)"
-# )
 RE_NAMED_AFTER = re.compile(r"\s+им\.|\sимени\s", re.IGNORECASE)
 RE_ROMAN_NUMS = re.compile(r'\b(?!(?:ML|DL)\b)[IVXLCDM]+\b')  # Наличие римских цифр (Петр I, Людовик XIV) (Кроме ML/DL)
 RE_DATES = re.compile(r"\b\d+\s+(января|февраля|марта|апреля|мая|июня|июля|августа|сентября|октября|ноября|декабря)|"
                       r"(\b\d+(-й|-го|-е)?\s+год)", re.IGNORECASE)
 RE_BAD_START_WORDS = re.compile(  # Нежелательные стартовые слова
-	r"^(список|премия|хронология|история|география|население|экономика|культура|политика|герб|"
+	r"^(список|премия|хронология|история|география|население|экономика|культура|политика|санкции|герб|"
 	r"флаг|гимн|календарь|словарь|атлас|фильмография|улица|район|районы|единая россия)\s+",
 	re.IGNORECASE)
 RE_GEOGRAPHY = re.compile(
@@ -188,7 +182,7 @@ def _is_fundamental(
 		- title is not None, text = None -> Проверка фундаментальности названия статьи.
 		- title = None, text is not None -> Проверка фундаментальности текста статьи.
 		- title & text is not None -> Проверка на фундаментальность названия и текста статьи вместе.
-	:param min_article_length: Минимальная длина статьи, которая пройдёт проверку.
+	:param min_article_length: Ограничение снизу на число символов в фундаментальной статье.
 	Если 0, то ограничений по размеру статьи снизу нет.
 	:param check_first_k: Сколько первых символов статьи проверять.
 	:return: Фундаментальная ли статья и тип мусора. Если статья фундаментальна - тип мусора - None
@@ -242,7 +236,17 @@ def _normalize_text(text: str):
 	text = unicodedata.normalize('NFKC', text)  # Возвращаемся обратно
 	text = re.sub(r'\s*\(\s*\)', '', text)  # Удаление пустых скобок
 	text = re.sub(r'\[.*?]', '', text)  # Удаление квадратных скобок и всего, что внутри них
-	text = re.sub(r"[—–]", "-", text)  # Все чёрточки превращаются в минусы
+
+	# text = re.sub(r"[—–]", "-", text)  # Все чёрточки превращаются в минусы
+	# 1. Сначала приводим ВСЕ виды длинных, средних и кривых тире из Юникода к ОДНОМУ эталонному длинному тире (—)
+	# При этом обычный дефис (-) мы здесь НЕ трогаем, он остается дефисом.
+	text = re.sub(r"[–‒⎼⁃⎯⌲⏤▕─⸺⸻⸼―]", "—", text)
+
+	# 2. Убираем пробельный мусор вокруг тире, чтобы модель не путалась в их количестве,
+	# но сохраняем структуру (например, пробел-тире-пробел для знака препинания)
+	text = re.sub(r' +— +', ' — ', text)
+
+
 	text = re.sub(r'[ \t]+', ' ', text)  # Схлопываем множественные пробелы в один
 	text = re.sub(r'\n\s*\n+', '\n', text)  # Удаление множественных переносов строк
 	return text.strip()
@@ -291,25 +295,31 @@ def _get_article_titles(
 
 	stats = {
 		"total_articles": len(dataset),
-		"FUNDAMENTAL": 0,
-		"BIO": 0,
-		"NAMED_AFTER":0,
-		"ROMAN_NUMS": 0,
-		"DATES": 0,
-		"BAD_START_WORD": 0,
-		"GEOGRAPHY": 0,
-		"VALUES": 0,
-		"SPORT": 0,
-		"TOO_SHORT_RAW": 0,
-		"TOO_SHORT_POST_CLEAN": 0,
-		"GEOPOLITICS": 0,
-		"BIO_CARD": 0,
-		"POLITICS_MILITARY": 0,
-		"INFRASTRUCTURE": 0,
-		"GEOGRAPHY_CONTENT": 0,
-		"ASTRONOMY": 0,
+		# "FUNDAMENTAL": 0,
+		# "BIO": 0,
+		# "NAMED_AFTER":0,
+		# "ROMAN_NUMS": 0,
+		# "DATES": 0,
+		# "BAD_START_WORD": 0,
+		# "GEOGRAPHY": 0,
+		# "VALUES": 0,
+		# "SPORT": 0,
+		# "TOO_SHORT_RAW": 0,
+		# "TOO_SHORT_POST_CLEAN": 0,
+		# "GEOPOLITICS": 0,
+		# "BIO_CARD": 0,
+		# "POLITICS_MILITARY": 0,
+		# "INFRASTRUCTURE": 0,
+		# "GEOGRAPHY_CONTENT": 0,
+		# "ASTRONOMY": 0,
 	}
 	sizes = {}
+
+	def save_stats(key):
+		if key in stats:
+			stats[key] += 1
+		else:
+			stats[key] = 1
 
 	def save_size(text_len):
 		# Вычисляем нужный диапазон (округляем вверх до ближайшего шага)
@@ -334,11 +344,13 @@ def _get_article_titles(
 			)
 			if is_fundamental:
 				f_fun.write(f"{title} - [{len(text)}]" + "\n")
-				stats["FUNDAMENTAL"] += 1
+				# stats["FUNDAMENTAL"] += 1
+				save_stats("FUNDAMENTAL")
 				save_size(len(text))
 			else:
 				f_garb.write(f"{title} - {trash_type.name} - [{len(text)}]" + "\n")
-				stats[trash_type.name] += 1
+				save_stats(trash_type.name)
+# 				stats[trash_type.name] += 1
 
 			progress += 1
 			if progress % 100_000 == 0:
@@ -352,8 +364,11 @@ def _get_article_titles(
 		print(f"Time: {time.time() - start_time:.2f}s")
 
 		print(f"Всего фундаментальных названий: {stats["FUNDAMENTAL"]}")
-		print(stats)
-		print(sizes)
+		print("STATS")
+		print(*sorted(stats.items(), key=lambda x: x[1], reverse=True), sep='\n')
+		print("SIZES")
+		print(*sorted(sizes.items(), key=lambda x: x[0]), sep='\n')
+
 
 
 def print_articles_by_titles(dataset, titles: list[str], first_k=500, clean: bool = False):
@@ -369,68 +384,78 @@ def print_articles_by_titles(dataset, titles: list[str], first_k=500, clean: boo
 			print()
 
 
-def build_dataset(
+def main(
 		dataset,
 		output_dir,
+		# stats_dir,
 		start_tag  = "<startoftext>",
 		end_tag = "<endoftext>",
 		max_shard_size_gb=1.0,
-		check_first_k=500,
-		min_dirty_article_length=3000,
-		min_clean_article_length=2500,
+		check_first_k=1000,
+		min_dirty_article_length=300,
+		min_clean_article_length=250,
+		size_step = 1000
 ):
-	"""Пайплайн фильтрации, очистки и нарезки датасета на txt шарды"""
-	os.makedirs(output_dir, exist_ok=True)
+	"""
+	Пайплайн фильтрации, очистки и нарезки датасета на txt шарды
+	"""
+	os.makedirs(f"{output_dir}/stats", exist_ok=True)
 
-	max_bytes = max_shard_size_gb * 1024 * 1024 * 1024
-	shard_index = 1
-	current_shard_bytes = 0
+	shard_writer = ShardWriter(output_dir, "wiki_articles", max_shard_size_gb)
+
+	# max_bytes = max_shard_size_gb * 1024 * 1024 * 1024
+	# shard_index = 1
+	# current_shard_bytes = 0
+
 	start_time = time.time()
-	processed_count = 0
+	progress = 0
 	saved_count = 0
 
 	# Открываем первый шард
-	shard_path = os.path.join(output_dir, f"wiki_shard_{shard_index}.txt")
-	f = open(shard_path, "w", encoding="utf-8")
-	f_titles_fund = open(f"{STATS_DIR}/titles_fundamental.txt", "w", encoding="utf-8")
-	f_titles_garb = open(f"{STATS_DIR}/titles_garbage.txt", "w", encoding="utf-8")
-	f_stats = open(f"{STATS_DIR}/stats.txt", "w", encoding="utf-8")
+	# shard_path = os.path.join(output_dir, f"wiki_shard_{shard_index}.txt")
+	# f = open(shard_path, "w", encoding="utf-8")
 
-	stats = {
-		"total_articles": len(dataset),
-		"FUNDAMENTAL": 0,
-		"BIO": 0,
-		"ROMAN_NUMS": 0,
-		"DATES": 0,
-		"BAD_START_WORD": 0,
-		"GEOGRAPHY": 0,
-		"VALUES": 0,
-		"SPORT": 0,
-		"TOO_SHORT_RAW": 0,
-		"TOO_SHORT_POST_CLEAN": 0,
-		"GEOPOLITICS": 0,
-		"BIO_CARD": 0,
-		"POLITICS_MILITARY": 0,
-		"INFRASTRUCTURE": 0,
-		"GEOGRAPHY_CONTENT": 0,
-		"ASTRONOMY": 0,
-	}
+	f_titles = open(f"{output_dir}/stats/titles.txt", "w", encoding="utf-8")
 
+
+	stats = {"total_articles": len(dataset),}
+	sizes = {}
+	def save_stats(key):
+		if key in stats:
+			stats[key] += 1
+		else:
+			stats[key] = 1
+
+	def save_size(text_len):
+		# Вычисляем нужный диапазон (округляем вверх до ближайшего шага)
+		k = ((text_len + size_step - 1) // size_step) * size_step
+
+		if k in sizes:
+			sizes[k] += 1
+		else:
+			sizes[k] = 1
 
 	# Формируем шарды
 	print(f"Запуск пайплайна. Целевой размер шарда: {max_shard_size_gb} ГБ")
 	for item in dataset:
-		processed_count += 1
+		progress += 1
 		title = item["title"]
 		text = item["text"]
 
 		# Проверка на фундаментальность
-		if not _is_fundamental(
+		is_fundamental, trash_type = _is_fundamental(
 				title=title,
 				text=text,
 				min_article_length=min_dirty_article_length,
-				check_first_k=check_first_k):
+				check_first_k=check_first_k)
+
+		save_stats(trash_type.name)
+		f_titles.write(f"{title} [{trash_type.name}] [{len(text)}]\n")
+
+		if not is_fundamental:
 			continue
+
+		save_size(len(text))
 
 		# Отрезаем мусорные разделы и нормализуем текст
 		text = _truncate_sections(text)
@@ -438,43 +463,61 @@ def build_dataset(
 
 		# На всякий случай проверяем длину после обрезки хвостов
 		if len(text) < min_clean_article_length:
+			save_stats("TOO_SHORT_POST_CLEAN")
 			continue
+
 
 		# Формируем финальный блок для претрейна
 		block = f"{start_tag}\n{title}\n{text}\n{end_tag}\n\n"
-		block_bytes = len(block.encode('utf-8'))
 
-		# Проверяем, не переполнился ли текущий файл
-		if current_shard_bytes + block_bytes > max_bytes:
-			f.flush()
-			f.close()
-			print(f" Сформирован шард {shard_index}: {current_shard_bytes / (1024 ** 2):.2f} МБ. Успешно записан.")
+		# block_bytes = len(block.encode('utf-8'))
+		#
+		# # Проверяем, не переполнился ли текущий файл
+		# if current_shard_bytes + block_bytes > max_bytes:
+		# 	f.flush()
+		# 	f.close()
+		# 	print(f" Сформирован шард {shard_index}: {current_shard_bytes / (1024 ** 2):.2f} МБ. Успешно записан.")
+		#
+		# 	# Открываем новый файл
+		# 	shard_index += 1
+		# 	shard_path = os.path.join(output_dir, f"wiki_shard_{shard_index}.txt")
+		# 	f = open(shard_path, "w", encoding="utf-8")
+		# 	current_shard_bytes = 0
 
-			# Открываем новый файл
-			shard_index += 1
-			shard_path = os.path.join(output_dir, f"wiki_shard_{shard_index}.txt")
-			f = open(shard_path, "w", encoding="utf-8")
-			current_shard_bytes = 0
+		shard_writer.write_doc(block)
 
 		# Пишем блок в текущий шард
-		f.write(block)
-		current_shard_bytes += block_bytes
-		saved_count += 1
+		# f.write(block)
+		# current_shard_bytes += block_bytes
+		# saved_count += 1
 
-		if processed_count % 100_000 == 0:
-			elapsed = time.time() - start_time
-			print(
-				f"Обработано: {processed_count} | Сохранено годноты: {saved_count} | Прошло времени: {elapsed:.1f} сек")
+		if progress % 100_000 == 0:
+			t = time.time() - start_time
+			v = progress / t
+			print(f"\rProgress: {progress / len(dataset) * 100:.2f}% | "
+			      f"Time: {t:.2f} s | "
+			      f"Time Left: {(len(dataset) - progress) / v:.2f} s | "
+			      f"Speed: {v:.2f} Articles / s", end="", flush=True)
+
 
 	# Не забываем закрыть последний файл
-	f.flush()
-	f.close()
+	shard_writer.flush()
+	f_titles.flush()
+	f_titles.close()
+
+	# Пишем статистику в файлы
+	with open(f"{output_dir}/stats/stats.txt", "w", encoding="utf-8") as f_stats, \
+			open(f"{output_dir}/stats/fundamental_sizes.txt", "w", encoding="utf-8") as f_sizes:
+		for name, count in sorted(stats.items(), key=lambda x: x[1], reverse=True):
+			f_stats.write(f"{name}: {count}\n")
+		for symbols, count in sorted(sizes.items(), key=lambda x: x[0]):
+			f_sizes.write(f"{symbols}: {count}\n")
 
 	print("\n" + "=" * 60)
 	print(f"Пайплайн успешно завершен за {time.time() - start_time:.1f} сек!")
-	print(f"Всего проверено статей: {processed_count}")
+	# print(f"Всего проверено статей: {processed_count}")
 	print(f"Всего сохранено в чистый датасет: {saved_count}")
-	print(f"Итоговое количество шардов: {shard_index}")
+	print(f"Итоговое количество шардов: {shard_writer.shard_index}")
 
 
 if __name__ == "__main__":
@@ -487,13 +530,18 @@ if __name__ == "__main__":
 		split="train"
 	)
 
-	_get_article_titles(
-		ds,
-		"fundamental_wiki_article_titles.txt",
-		"garbage_wiki_article_titles.txt",
-		min_article_length=300,
-		check_first_k=1000,
+	main(
+		dataset=ds.select(range(0, 5000)),
+		output_dir=CLEANED_DIR
 	)
+
+	# _get_article_titles(
+	# 	ds,
+	# 	"fundamental_wiki_article_titles.txt",
+	# 	"garbage_wiki_article_titles.txt",
+	# 	min_article_length=300,
+	# 	check_first_k=1000,
+	# )
 
 	# print_articles_by_titles(
 	# 	ds,
