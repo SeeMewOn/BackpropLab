@@ -53,7 +53,7 @@ RE_DATES = re.compile(r"\b\d+\s+(января|февраля|марта|апре
                       r"(\b\d+(-й|-го|-е)?\s+год)", re.IGNORECASE)
 RE_BAD_START_WORDS = re.compile(  # Нежелательные стартовые слова
 	r"^(список|премия|хронология|история|география|население|экономика|культура|политика|санкции|герб|"
-	r"флаг|гимн|календарь|словарь|атлас|фильмография|улица|район|районы|единая россия)\s+",
+	r"флаг|гимн|календарь|словарь|атлас|фильмография|улица|район|районы|единая россия|заслуженный|награды)\s+",
 	re.IGNORECASE)
 RE_GEOGRAPHY = re.compile(
 	r"я область|сельсовет|сельские советы|поселение|департамент|улица|переулок|"
@@ -164,28 +164,29 @@ TEXT_RULES = [
 
 TRASH_SECTION_PATTERNS = [
 	# 1. COMMON
-	r"^См\. также",
+	r"^\s*См\. также",
 	# r"^Примечания\s*(?:к таблице|и ссылки|:|\.|$)",
-	r"^(?:примечания|ссылки|литература|источники|список|внешние|основные|дополнительная|дополнительные|использованная|использованные|рекомендуемая|рекомендуемые|библиографический)\s*"
+	r"^\s*(?:примечания|ссылки|литература|источники|список|внешние|основные|дополнительная|дополнительные|использованная|использованные|рекомендуемая|рекомендуемые|библиографический)\s*"
 	r"(?:и|на|к|по|для|о|об|из)?\s*"
-	r"(?:источники|примечания|разделу|разделы|теме|публикации|ссылки|литература|литературы|к таблице|сноски|сносок|комментарии|комментариев)?\s*"
-	r"(?:$|\.|:)",
+	r"(?:источники|примечания|разделу|разделы|теме|публикации|ссылки|литература|литературы|таблице|сноски|сносок|комментарии|комментариев|списку|внешние ресурсы)?\s*"
+	r"(?:$|\.|:|;)",
 
 	# 2. Фильмы
-	r"^В ролях\s*(?:$|\.|:)",
-	r"^Создатели\s*(?:$|\.|:)",
-	r"^Съёмочная группа\s*(?:$|\.|:)",
-	r"^Награды\s*(?:$|\.|:)",
-	r"^Премии\s*(?:$|\.|:)",
-	r"^Номинации\s*(?:$|\.|:)",
-	r"^Награды и номинации\s*(?:$|\.|:)",
-	r"^Критика\s*(?:$|\.|:)",
-	r"^Саундтрек\s*(?:$|\.|:)",
-	r"^Кассовые сборы\s*(?:$|\.|:)",
+	r"^\s*В ролях\s*(?:$|\.|:|;)",
+	r"^\s*Создатели\s*(?:$|\.|:|;)",
+	r"^\s*Съёмочная группа\s*(?:$|\.|:|;)",
+	r"^\s*Награды\s*(?:$|\.|:|;)",
+	r"^\s*Премии\s*(?:$|\.|:|;)",
+	r"^\s*Номинации\s*(?:$|\.|:|;)",
+	r"^\s*Награды и номинации\s*(?:$|\.|:|;)",
+	r"^\s*Критика\s*(?:$|\.|:|;)",
+	r"^\s*Саундтрек\s*(?:$|\.|:|;)",
+	r"^\s*Кассовые сборы\s*(?:$|\.|:|;)",
+	r"^\s*Экранизации\s*(?:$|\.|:|;)",
 
 	# 3. Страны, прочее
-	r"^Галерея\s*(?:$|\.|:)",
-	r"^Демография\s*(?:$|\.|:)",
+	r"^\s*Галерея\s*(?:$|\.|:|;)",
+	r"^\s*Демография\s*(?:$|\.|:|;)",
 ]
 
 # Собираем всё в одну мега-регулярку для дикой скорости
@@ -283,6 +284,12 @@ def _normalize_text(text: str):
 	# 2. Убираем пробельный мусор вокруг тире, чтобы модель не путалась в их количестве,
 	# но сохраняем структуру (например, пробел-тире-пробел для знака препинания)
 	text = re.sub(r' +— +', ' — ', text)
+
+	# ^[ \t]+ ловит любые пробелы и табуляции в начале КАЖДОЙ строки строки благодаря re.M
+	text = re.sub(r'^[ \t]+', '', text, flags=re.MULTILINE)
+
+	# пробелы в КОНЦЕ строк
+	text = re.sub(r'[ \t]+$', '', text, flags=re.MULTILINE)
 
 	text = re.sub(r'[ \t]+', ' ', text)  # Схлопываем множественные пробелы в один
 	text = re.sub(r'\n\s*\n+', '\n', text)  # Удаление множественных переносов строк
@@ -429,8 +436,8 @@ def main(
 		end_tag="<endoftext>",
 		max_shard_size_gb=1.0,
 		check_first_k=1000,
-		min_dirty_article_length=300,
-		min_clean_article_length=250,
+		min_dirty_article_length=500,
+		min_clean_article_length=400,
 		size_step=1000
 ):
 	"""
@@ -441,6 +448,7 @@ def main(
 	total_size = dataset.size_in_bytes
 	print(total_size / (1024**3))
 
+	total_articles = len(dataset)
 	processed_bytes = 0
 	progress = 0
 	saved_count = 0
@@ -482,55 +490,42 @@ def main(
 			min_article_length=min_dirty_article_length,
 			check_first_k=check_first_k)
 
-		save_stats(trash_type.name)
-		f_titles.write(f"{title} [{trash_type.name}] [{len(text)}]\n")
 
 		if not is_fundamental:
+			save_stats(trash_type.name)
+			f_titles.write(f"{title} [{trash_type.name}] [{len(text)}]\n")
 			continue
 
-		save_size(len(text))
 
 		# Отрезаем мусорные разделы и нормализуем текст
 		text = _truncate_sections(text)
 		text = _normalize_text(text)
 
+
 		# На всякий случай проверяем длину после обрезки хвостов
 		if len(text) < min_clean_article_length:
 			save_stats("TOO_SHORT_POST_CLEAN")
+			f_titles.write(f"{title} [TOO_SHORT_POST_CLEAN] [{len(text)}]\n")
 			continue
 
 		# Формируем финальный блок для претрейна
+		save_stats("FUNDAMENTAL")
+		save_size(len(text))
 		block = f"{start_tag}\n{title}\n{text}\n{end_tag}\n\n"
 
-		# block_bytes = len(block.encode('utf-8'))
-		#
-		# # Проверяем, не переполнился ли текущий файл
-		# if current_shard_bytes + block_bytes > max_bytes:
-		# 	f.flush()
-		# 	f.close()
-		# 	print(f" Сформирован шард {shard_index}: {current_shard_bytes / (1024 ** 2):.2f} МБ. Успешно записан.")
-		#
-		# 	# Открываем новый файл
-		# 	shard_index += 1
-		# 	shard_path = os.path.join(output_dir, f"wiki_shard_{shard_index}.txt")
-		# 	f = open(shard_path, "w", encoding="utf-8")
-		# 	current_shard_bytes = 0
 
 		shard_writer.write_doc(block)
-
-		# Пишем блок в текущий шард
-		# f.write(block)
-		# current_shard_bytes += block_bytes
-		# saved_count += 1
+		saved_count += 1
 
 		if progress % 10_000 == 0:
 			t = time.time() - start_time
-			v = processed_bytes / t
+			v_docs = progress / t
+			v_mb = processed_bytes / t
 			print(
-				f"\rProgress: {processed_bytes / total_size * 100:.2f}% | "
+				f"\rProgress: {progress / total_articles * 100:.2f}% | "
 				f"Time: {t:.2f} s | "
-				f"Time Left: {(total_size - processed_bytes) / v:.2f} s | "
-				f"Speed: {v / (1024 ** 2):.2f} Mb/s",
+				f"Time Left: {(total_articles - progress) / v_docs:.2f} s | "
+				f"Speed: {v_mb / (1024 ** 2):.2f} Mb/s ({v_docs:.1f} art/s)",
 				end="",
 				flush=True
 			)
@@ -565,18 +560,18 @@ if __name__ == "__main__":
 		split="train"
 	)
 
-	# main(
-	# 	dataset=ds.select(range(0, 100_000)),
-	# 	output_dir=CLEANED_DIR
-	# )
-
-	_get_article_titles(
-		ds,
-		"fundamental_wiki_article_titles.txt",
-		"garbage_wiki_article_titles.txt",
-		min_article_length=300,
-		check_first_k=1000,
+	main(
+		dataset=ds,
+		output_dir=CLEANED_DIR
 	)
+
+	# _get_article_titles(
+	# 	ds,
+	# 	"fundamental_wiki_article_titles.txt",
+	# 	"garbage_wiki_article_titles.txt",
+	# 	min_article_length=500,
+	# 	check_first_k=1000,
+	# )
 
 # print_articles_by_titles(
 # 	ds,
