@@ -8,40 +8,38 @@ from shard_writer import ShardWriter
 RANDOM_SEED = 42
 random.seed(RANDOM_SEED)
 
-TRAIN_DIR = "DELLMA_2_DATA/TRAIN"
-TOKENIZER_TARIN_DIR = "DELLMA_2_DATA/TOK_TRAIN"
-VALIDATION_DIR = "DELLMA_2_DATA/VALIDATION"
+TRAIN_DIR = "../../../data/DELLMA_2_DATA/train"
+TOKENIZER_TARIN_DIR = "../../../data/DELLMA_2_DATA/tok_train"
+VALIDATION_DIR = "../../../data/DELLMA_2_DATA/validation"
 
-DATASONE_DIR = "CLEANED_DATA/CLEANED_DATASONE"
-OIMASIRUTEXT_DIR = "CLEANED_DATA/CLEANED_OIMASIRUTEXT"
+WIKI_DIR = "../../../data/CLEANED_DATA/wiki"
+BOOKS_DIR = "../../../data/CLEANED_DATA/literature"
 DS_FILES = [
-    f"{OIMASIRUTEXT_DIR}/cleaned_data_1.txt",
-    f"{OIMASIRUTEXT_DIR}/cleaned_data_2.txt",
-    f"{OIMASIRUTEXT_DIR}/cleaned_data_3.txt",
-    f"{OIMASIRUTEXT_DIR}/cleaned_data_4.txt",
-    f"{OIMASIRUTEXT_DIR}/cleaned_data_5.txt",
-    f"{OIMASIRUTEXT_DIR}/cleaned_data_6.txt",
-    f"{OIMASIRUTEXT_DIR}/cleaned_data_7.txt",
-    # f"{DATASONE_DIR}/cleaned_articles_1.txt",
-    # f"{DATASONE_DIR}/cleaned_articles_2.txt",
-    # f"{DATASONE_DIR}/cleaned_articles_3.txt",
-    # f"{DATASONE_DIR}/cleaned_articles_4.txt",
-    # f"{DATASONE_DIR}/cleaned_articles_5.txt",
-    # f"{DATASONE_DIR}/cleaned_articles_6.txt",
-    # f"{DATASONE_DIR}/cleaned_articles_7.txt",
-    # f"{DATASONE_DIR}/cleaned_articles_8.txt",
-    # f"{DATASONE_DIR}/cleaned_articles_9.txt",
-    # f"{DATASONE_DIR}/cleaned_articles_10.txt",
+    f"{WIKI_DIR}/wiki_articles_1.txt",
+    f"{WIKI_DIR}/wiki_articles_2.txt",
+    f"{WIKI_DIR}/wiki_articles_3.txt",
+    f"{WIKI_DIR}/wiki_articles_4.txt",
+    f"{BOOKS_DIR}/books_1.txt",
+    f"{BOOKS_DIR}/books_2.txt",
+    f"{BOOKS_DIR}/books_3.txt",
+    f"{BOOKS_DIR}/books_4.txt",
 ]
 
-
-def _get_total_size():
-    datasone = Path(DATASONE_DIR)
-    oimasirutext = Path(OIMASIRUTEXT_DIR)
-    datasone_size = sum(f.stat().st_size for f in datasone.iterdir() if f.is_file())
-    oimasirutext_size = sum(f.stat().st_size for f in oimasirutext.iterdir() if f.is_file())
-    total_size = datasone_size + oimasirutext_size
+def _get_total_size(file_list):
+    total_size = 0
+    for file_path in file_list:
+        p = Path(file_path)
+        if p.exists():
+            total_size += p.stat().st_size
     return total_size
+#
+# def _get_total_size():
+#     datasone = Path(WIKI_DIR)
+#     oimasirutext = Path(BOOKS_DIR)
+#     datasone_size = sum(f.stat().st_size for f in datasone.iterdir() if f.is_file())
+#     oimasirutext_size = sum(f.stat().st_size for f in oimasirutext.iterdir() if f.is_file())
+#     total_size = datasone_size + oimasirutext_size
+#     return total_size
 
 
 def main(
@@ -50,11 +48,12 @@ def main(
         max_shard_size_gb=1.0,
         start_tag="<startoftext>",
         end_tag="<endoftext>",
+        duplicates_check=True,
 ):
     train_writer = ShardWriter(TRAIN_DIR, "train", max_shard_size_gb)
     val_writer = ShardWriter(VALIDATION_DIR, "validation", max_shard_size_gb)
     tok_train_writer = ShardWriter(TOKENIZER_TARIN_DIR, "tok_train", max_shard_size_gb)
-    total_size = _get_total_size()
+    total_size = _get_total_size(DS_FILES)
     tok_train_ratio = (tok_train_size_gb * 1024 ** 3) / total_size
 
     seen_hashes = set()  # D5-хеши уникальных текстов
@@ -69,9 +68,9 @@ def main(
     for file in DS_FILES:
         with open(file, "r", encoding='utf-8') as f:
             for line in f:
+                processed_bytes += len(line.encode("utf-8", errors="ignore"))
                 line = line.strip()
                 progress += 1
-                processed_bytes += len(line.encode("utf-8", errors="ignore"))
 
                 if line == start_tag:
                     in_doc = True
@@ -81,19 +80,20 @@ def main(
                 if line == end_tag:
                     in_doc = False
                     block = "\n".join(current_doc_lines + [f"{end_tag}\n"])
-                    block_hash = hashlib.md5(block[:3000].encode("utf-8")).hexdigest()
 
                     # Детектор Дубликатов
-                    if block_hash in seen_hashes:
-                        stats["duplicates"] += 1
-                        continue
-                    seen_hashes.add(block_hash)
+                    if duplicates_check:
+                        block_hash = hashlib.md5(block[:3000].encode("utf-8")).hexdigest()
+                        if block_hash in seen_hashes:
+                            stats["duplicates"] += 1
+                            continue
+                        seen_hashes.add(block_hash)
 
                     # Решаем куда отправлять блок - train или validation.
                     # Дополнительно решаем добавлять ли блок в датасет
                     # для обучения токенизатора
-                    is_val = True if random.random() < val_ratio else False
-                    is_tok_train = True if random.random() < tok_train_ratio else False
+                    is_val = random.random() < val_ratio
+                    is_tok_train = random.random() < tok_train_ratio
                     if is_val:
                         stats["val"] += 1
                         val_writer.write_doc(block)
